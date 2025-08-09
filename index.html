@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>抽選ページ 🎉</title>
+<link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet" />
+<style>
+  /* ポップなカラフルグラデ背景 */
+  @keyframes bg-gradient {
+    0% {background-position:0% 50%;}
+    50% {background-position:100% 50%;}
+    100% {background-position:0% 50%;}
+  }
+  body {
+    margin:0; padding:0;
+    height: 100vh;
+    font-family: 'Kosugi Maru', sans-serif;
+    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fad0c4, #ff9a9e);
+    background-size: 400% 400%;
+    animation: bg-gradient 15s ease infinite;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    color: #333;
+    text-align: center;
+    user-select: none;
+  }
+  h1 {
+    font-size: 2.4rem;
+    margin-bottom: 1rem;
+  }
+  #message {
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    min-height: 2.5rem;
+  }
+  button {
+    font-size: 1.4rem;
+    padding: 12px 32px;
+    border: none;
+    border-radius: 40px;
+    background: #ff7f50;
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(255,127,80,0.6);
+    transition: background 0.3s ease;
+  }
+  button:hover {
+    background: #ff5722;
+  }
+  #info {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(255 255 255 / 0.8);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: #444;
+    max-width: 200px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+  }
+  #confetti-canvas {
+    position: fixed;
+    pointer-events: none;
+    top:0; left:0; width:100%; height:100%;
+    z-index: 1000;
+  }
+  #winner-list-container {
+    margin-top: 2rem;
+    max-width: 90vw;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: rgba(255 255 255 / 0.9);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 0 16px rgba(0,0,0,0.2);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 1.1rem;
+  }
+  th, td {
+    border: 2px solid #ff7f50;
+    padding: 6px 12px;
+    text-align: center;
+    color: #333;
+  }
+  th {
+    background: #ff7f50;
+    color: white;
+  }
+  #show-winners-btn {
+    margin-top: 1rem;
+    background: #4caf50;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎉 ボタンを押して抽選！ 🎉</h1>
+<div id="message">参加者IDを読み込んでください。</div>
+<button id="draw-btn" disabled>抽選する</button>
+
+<div id="info"></div>
+
+<div id="winner-list-container" style="display:none;">
+  <h2>🎉 これまでの当選結果 🎁</h2>
+  <table id="winner-table">
+    <thead>
+      <tr><th>参加者ID</th><th>氏名</th><th>景品名</th><th>当選日時</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<button id="show-winners-btn" style="display:none;">当選者一覧を表示</button>
+
+<audio id="bgm" src="bgm.mp3" preload="auto"></audio>
+
+<canvas id="confetti-canvas"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script>
+  // URLパラメータからpidを取得
+  function getParam(name) {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  }
+
+  const pid = getParam("pid");
+  const drawBtn = document.getElementById("draw-btn");
+  const message = document.getElementById("message");
+  const info = document.getElementById("info");
+  const bgm = document.getElementById("bgm");
+  const confettiCanvas = document.getElementById("confetti-canvas");
+  const winnerListContainer = document.getElementById("winner-list-container");
+  const winnerTableBody = document.querySelector("#winner-table tbody");
+  const showWinnersBtn = document.getElementById("show-winners-btn");
+
+  // GASのURL（要ご自身のGASデプロイURLに差し替えてください）
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz60sf6e_yGgsZCr_cJbtWsqnWWbW66oIs7n0B96guCfoTwT0Sv5GZAODnNr9J3_3PT/exec";
+
+  let currentWinners = 0;
+  let prizeCount = 0;
+  let hasDrawn = false;
+
+  if (!pid) {
+    message.textContent = "エラー：参加者ID（pid）がURLにありません。";
+  } else {
+    message.textContent = `参加者ID: ${pid} さん、準備OKです！`;
+    drawBtn.disabled = false;
+  }
+
+  drawBtn.addEventListener("click", () => {
+    if (hasDrawn) return;
+    hasDrawn = true;
+    drawBtn.disabled = true;
+    message.textContent = "抽選中・・・";
+
+    fetch(`${GAS_URL}?pid=${encodeURIComponent(pid)}`)
+      .then(res => res.json())
+      .then(data => {
+        if(data.result === "limit_reached") {
+          message.textContent = "申し訳ありません、すでに当選上限に達しました。";
+          drawBtn.style.display = "none";
+          showWinnersBtn.style.display = "inline-block";
+          return;
+        }
+        if(data.result === "error") {
+          message.textContent = `エラー: ${data.message}`;
+          drawBtn.disabled = false;
+          hasDrawn = false;
+          return;
+        }
+        if(data.result === "already_won" || data.result === "win") {
+          currentWinners = data.current_winners;
+          prizeCount = data.prize_count;
+          message.innerHTML = `
+            おめでとうございます！<br>
+            <strong>${data.participant_name}</strong> さんの当選景品は<br>
+            <span style="font-size:1.5rem; color:#ff5722;">${data.prize}</span> です！
+          `;
+          drawBtn.style.display = "none";
+          playBGM();
+          launchConfetti();
+          updateInfo(currentWinners, prizeCount);
+          if(currentWinners >= prizeCount) {
+            showWinnersBtn.style.display = "inline-block";
+          }
+          return;
+        }
+        // それ以外
+        message.textContent = "不明なレスポンスを受信しました。";
+        drawBtn.disabled = false;
+        hasDrawn = false;
+      })
+      .catch(err => {
+        message.textContent = "通信エラーが発生しました。再度お試しください。";
+        drawBtn.disabled = false;
+        hasDrawn = false;
+        console.error(err);
+      });
+  });
+
+  function updateInfo(current, total) {
+    info.textContent = `当選者数: ${current} / ${total}  残り景品: ${total - current}`;
+  }
+
+  function playBGM() {
+    bgm.currentTime = 0;
+    bgm.play().catch(e => {
+      // ユーザー操作が必要なブラウザ対策
+      console.log("BGM再生失敗", e);
+    });
+  }
+
+  function launchConfetti() {
+    const duration = 5 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
+
+    function frame() {
+      confetti({
+        particleCount: 5,
+        origin: { x: Math.random(), y: Math.random() * 0.6 },
+        ...defaults
+      });
+      if (Date.now() < animationEnd) {
+        requestAnimationFrame(frame);
+      }
+    }
+    frame();
+  }
+
+  // 当選者一覧表示処理
+  showWinnersBtn.addEventListener("click", () => {
+    showWinnersBtn.disabled = true;
+    message.textContent = "当選者一覧を取得中・・・";
+
+    fetch(`${GAS_URL}?action=getWinners`)
+      .then(res => res.json())
+      .then(data => {
+        if(data.result !== "ok") {
+          message.textContent = "当選者一覧の取得に失敗しました。";
+          showWinnersBtn.disabled = false;
+          return;
+        }
+        message.textContent = "これまでの当選結果を表示します。";
+        winnerTableBody.innerHTML = "";
+        data.winners.forEach(w => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${w.id}</td>
+            <td>${w.name || "匿名"}</td>
+            <td>${w.prize}</td>
+            <td>${new Date(w.datetime).toLocaleString()}</td>
+          `;
+          winnerTableBody.appendChild(tr);
+        });
+        winnerListContainer.style.display = "block";
+        showWinnersBtn.style.display = "none";
+      })
+      .catch(e => {
+        message.textContent = "通信エラーで当選者一覧を取得できません。";
+        showWinnersBtn.disabled = false;
+        console.error(e);
+      });
+  });
+</script>
+</body>
+</html>
