@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Lets.抽選！</title>
+<style>
+  body {
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    background: linear-gradient(135deg, #f6d365, #fda085);
+    text-align: center;
+    color: #333;
+    padding: 2em;
+  }
+  button {
+    font-size: 1.5em;
+    padding: 0.5em 1.5em;
+    margin-top: 1em;
+    border: none;
+    border-radius: 50px;
+    background: #ff6f91;
+    color: white;
+    cursor: pointer;
+  }
+  #result {
+    margin-top: 2em;
+    font-size: 1.2em;
+  }
+</style>
+</head>
+<body>
+  <h1>Lets.抽選！</h1>
+  <div id="status"></div>
+  <button id="drawButton">抽選スタート！</button>
+  <div id="result"></div>
+  <div id="winnersList"></div>
+
+  <audio id="bgm" src="bgm.mp3"></audio>
+  
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+  <script>
+    const gasUrl = "YOUR_GAS_WEB_APP_URL"; // GASのWebアプリURLに置き換え
+    const pid = new URLSearchParams(window.location.search).get('pid');
+    const drawButton = document.getElementById("drawButton");
+    const resultDiv = document.getElementById("result");
+    const statusDiv = document.getElementById("status");
+    const winnersListDiv = document.getElementById("winnersList");
+    const bgm = document.getElementById("bgm");
+
+    drawButton.addEventListener("click", () => {
+      if (!pid) {
+        alert("参加者IDが見つかりません");
+        return;
+      }
+      fetch(`${gasUrl}?pid=${pid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.result === "limit_reached") {
+            resultDiv.innerHTML = "<p>抽選は終了しました！</p>";
+            drawButton.style.display = "none";
+          } else if (data.result === "win") {
+            statusDiv.textContent = `現在 ${data.current} 人目 / 上限 ${data.limit} 人`;
+            bgm.play();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            resultDiv.innerHTML = `<p>🎉 ${data.name} さんが <strong>${data.prize}</strong> に当選！</p>`;
+            drawButton.style.display = "none";
+            if (data.current === data.limit) {
+              const btn = document.createElement("button");
+              btn.textContent = "当選者一覧を見る";
+              btn.onclick = () => {
+                fetch(`${gasUrl}?getpdf=1`)
+                  .then(r => r.json())
+                  .then(pdfData => {
+                    if (pdfData.result === "pdf_ready") {
+                      window.open(pdfData.url, "_blank");
+                    }
+                  });
+              };
+              winnersListDiv.appendChild(btn);
+            }
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          resultDiv.textContent = "エラーが発生しました。";
+        });
+    });
+  </script>
+</body>
+</html>
