@@ -1,235 +1,72 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>ポップな抽選ページ</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Google Font -->
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lets.抽選！</title>
   <style>
-    :root{
-      --bg1:#ff9a9e; --bg2:#fad0c4;
+    body {
+      font-family: 'M PLUS Rounded 1c', sans-serif;
+      background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+      text-align: center;
+      padding: 2em;
+      color: #333;
     }
-    html,body{height:100%;margin:0;font-family:'Noto Sans JP',sans-serif;}
-    body{
-      background: linear-gradient(135deg, var(--bg1), var(--bg2));
-      display:flex;align-items:center;justify-content:center;
+    button {
+      font-size: 1.5em;
+      padding: 0.5em 1.5em;
+      border: none;
+      border-radius: 50px;
+      background: #ff6f91;
+      color: white;
+      cursor: pointer;
     }
-    .card{
-      width:92%; max-width:900px; background:rgba(255,255,255,0.95);
-      border-radius:18px; padding:28px; box-shadow:0 10px 30px rgba(0,0,0,0.15);
-      text-align:center; position:relative; overflow:hidden;
+    #result {
+      margin-top: 2em;
+      font-size: 1.2em;
     }
-    h1{margin:0 0 6px 0; font-size:28px;}
-    p.lead{margin:0 0 18px 0; color:#555;}
-    #status{margin:8px 0 16px 0;font-weight:700;}
-    button{
-      background:linear-gradient(90deg,#ff7a7a,#ffb199); border:0; padding:14px 22px;
-      border-radius:12px; font-size:18px; cursor:pointer; box-shadow:0 6px 14px rgba(0,0,0,0.12);
-    }
-    #winnerBox{display:none; margin-top:20px;}
-    #winnerName{font-size:22px; font-weight:700; color:#d6336c;}
-    #prizeName{font-size:20px; color:#333;}
-    #finalList{display:none; margin-top:20px; text-align:left;}
-    table{width:100%; border-collapse:collapse; margin-top:10px;}
-    th,td{padding:8px;border-bottom:1px dashed #ddd;}
-    .small{font-size:13px;color:#666;}
-    .confetti-canvas{position:absolute;left:0;top:0;pointer-events:none;width:100%;height:100%;}
   </style>
 </head>
 <body>
-  <div class="card">
-    <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
-    <h1>🎯 ボタンを押して抽選！</h1>
-    <p class="lead">QRで来たら自分のIDでアクセスされます。景品数・当選上限はスプレッドシートで管理。</p>
-
-    <div id="status">
-      <span id="remainingText">残り: --</span>　|　現在: <span id="currentText">--</span> / <span id="maxText">--</span>
-    </div>
-
-    <div id="actionArea">
-      <button id="drawBtn">抽選する</button>
-    </div>
-
-    <div id="winnerBox">
-      <div id="winnerName"></div>
-      <div id="prizeName"></div>
-      <div class="small" id="timeInfo"></div>
-    </div>
-
-    <div id="finalList">
-      <button id="showListBtn">🎉 これまでの当選結果を表示</button>
-      <div id="listArea"></div>
-      <div style="margin-top:10px;">
-        <button id="downloadPdfBtn">PDFで保存</button>
-      </div>
-    </div>
-  </div>
-
-  <audio id="bgm" src="bgm.mp3" preload="auto"></audio>
-
-  <!-- confetti.js をCDNから読み込み -->
+  <h1>Lets.抽選！</h1>
+  <button id="drawButton">抽選スタート！</button>
+  <div id="result"></div>
+  
+  <audio id="bgm" src="bgm.mp3"></audio>
+  
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-
   <script>
-    // === 設定：ここにGASのWebアプリURLを入れる ===
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzBKU2b5vb-3Y4Os2SeDOYY7zJ_98GiRm78K8O3wJy5kfraZGZZZo6stRkgWfowZFAD/exec; // ← ここを書き換えてください
+    const gasUrl = "https://script.google.com/macros/s/AKfycbzBKU2b5vb-3Y4Os2SeDOYY7zJ_98GiRm78K8O3wJy5kfraZGZZZo6stRkgWfowZFAD/exec"; // ここにWebアプリ公開URLを設定
+    const urlParams = new URLSearchParams(window.location.search);
+    const pid = urlParams.get('pid');
+    const drawButton = document.getElementById("drawButton");
+    const resultDiv = document.getElementById("result");
+    const bgm = document.getElementById("bgm");
 
-    // ユーザーがQRで来た際にはURLに ?pid=P00X が付いている想定
-    function getQueryParam(name){
-      const url = new URL(location.href);
-      return url.searchParams.get(name);
-    }
-
-    const pid = getQueryParam('pid'); // P001など
-    const drawBtn = document.getElementById('drawBtn');
-    const winnerBox = document.getElementById('winnerBox');
-    const winnerName = document.getElementById('winnerName');
-    const prizeName = document.getElementById('prizeName');
-    const timeInfo = document.getElementById('timeInfo');
-    const remainingText = document.getElementById('remainingText');
-    const currentText = document.getElementById('currentText');
-    const maxText = document.getElementById('maxText');
-    const finalList = document.getElementById('finalList');
-    const showListBtn = document.getElementById('showListBtn');
-    const listArea = document.getElementById('listArea');
-    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-    const bgm = document.getElementById('bgm');
-
-    // confetti setup
-    const confettiCanvas = document.getElementById('confetti-canvas');
-    const myConfetti = confetti.create(confettiCanvas, { resize: true });
-
-    // 初期ステータス取得
-    async function fetchStatus(){
-      try {
-        const res = await fetch(`${GAS_URL}?action=status`);
-        const j = await res.json();
-        if(j.result === 'ok'){
-          remainingText.textContent = '残り: ' + j.remaining;
-          currentText.textContent = j.currentWinners;
-          maxText.textContent = j.maxWinners;
-          if(j.remaining === 0){
-            // limit reached
-            showFinalControls();
-          }
-        }
-      } catch(e){ console.error(e); }
-    }
-
-    function showFinalControls(){
-      // 抽選上限に達っている時は finalList を目立たせる
-      finalList.style.display = 'block';
-      drawBtn.disabled = true;
-      drawBtn.textContent = '抽選は終了しました';
-    }
-
-    // 抽選実行
-    async function doDraw(){
-      if(!pid){
-        alert('エラー：pidがURLに見つかりません。QRリンクを確認してください。');
+    drawButton.addEventListener("click", () => {
+      if (!pid) {
+        alert("参加者IDが見つかりません");
         return;
       }
-      drawBtn.disabled = true;
-      drawBtn.textContent = '抽選中...';
-
-      try {
-        const res = await fetch(`${GAS_URL}?pid=${encodeURIComponent(pid)}`);
-        const j = await res.json();
-
-        if(j.result === 'ok'){
-          // 再生（ユーザーのクリックイベント内なので自動再生ブロックされない）
-          try { await bgm.play(); } catch(e){ console.warn('BGM再生エラー', e); }
-          // 紙吹雪
-          myConfetti({
-            particleCount: 120,
-            spread: 80,
-            origin: { y: 0.6 }
-          });
-          winnerBox.style.display = 'block';
-          winnerName.textContent = (j.name && j.name !== '') ? j.name : '匿名';
-          prizeName.textContent = '🎁 ' + j.prize;
-          timeInfo.textContent = 'あなたは ' + j.currentWinners + ' 人目の当選者です';
-          remainingText.textContent = '残り: ' + j.remaining;
-          currentText.textContent = j.currentWinners;
-          maxText.textContent = j.maxWinners;
-          // hide button area
-          document.getElementById('actionArea').style.display = 'none';
-
-          // もし上限に達したら finalList を表示（最後の当選のページ）
-          if(j.remaining === 0){
-            finalList.style.display = 'block';
-            // 表示はユーザー操作で（ボタンで表示）
+      fetch(`${gasUrl}?pid=${pid}`)
+        .then(res => res.json())
+        .then(data => {
+          console.log("GASからの応答", data);
+          if (data.result === "limit_reached") {
+            resultDiv.innerHTML = "<p>抽選は終了しました！</p>";
+            drawButton.style.display = "none";
+          } else if (data.result === "win") {
+            bgm.play();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            resultDiv.innerHTML = `<p>🎉 ${data.name || "匿名"} さんが <strong>${data.prize}</strong> に当選！</p>`;
+            drawButton.style.display = "none";
           }
-        } else if(j.result === 'limit_reached'){
-          alert('抽選上限に達しています。');
-          showFinalControls();
-        } else if(j.result === 'already_won'){
-          winnerBox.style.display = 'block';
-          winnerName.textContent = (j.name && j.name !== '') ? j.name : '匿名';
-          prizeName.textContent = '（既に当選済み） ' + (j.prize || '');
-          document.getElementById('actionArea').style.display = 'none';
-        } else {
-          alert('エラーが発生しました: ' + (j.message||JSON.stringify(j)));
-          drawBtn.disabled = false;
-          drawBtn.textContent = '抽選する';
-        }
-      } catch(err){
-        console.error(err);
-        alert('通信エラーが発生しました。');
-        drawBtn.disabled = false;
-        drawBtn.textContent = '抽選する';
-      }
-    }
-
-    // 当選者一覧を取得して表示
-    async function showWinnersList(){
-      try {
-        const res = await fetch(`${GAS_URL}?action=list`);
-        const j = await res.json();
-        if(j.result === 'ok'){
-          const winners = j.winners;
-          if(winners.length === 0){
-            listArea.innerHTML = '<p class="small">まだ当選者はいません。</p>';
-            return;
-          }
-          var html = '<table><thead><tr><th>No</th><th>ID</th><th>氏名</th><th>景品</th><th>当選日時</th></tr></thead><tbody>';
-          for(let i=0;i<winners.length;i++){
-            const w = winners[i];
-            html += `<tr><td>${i+1}</td><td>${w.id}</td><td>${w.name||'匿名'}</td><td>${w.prize}</td><td>${w.time||''}</td></tr>`;
-          }
-          html += '</tbody></table>';
-          listArea.innerHTML = html;
-        }
-      } catch(e){ console.error(e); alert('一覧取得エラー'); }
-    }
-
-    // PDFダウンロード
-    function downloadPdf(){
-      // 直接GASのPDF出力エンドポイントを開くとPDFが返る設計
-      window.open(`${GAS_URL}?action=pdf`, '_blank');
-    }
-
-    // 初期化
-    (function(){
-      // ステータスを取得して表示
-      fetchStatus();
-
-      // 抽選ボタンの挙動
-      drawBtn.addEventListener('click', function(){
-        doDraw();
-      });
-
-      // 最終リスト関連
-      showListBtn.addEventListener('click', showWinnersList);
-      downloadPdfBtn.addEventListener('click', downloadPdf);
-
-      // もし pid が無い場合は警告表示（管理者が直接操作する場合もあるため制限はしない）
-      if(!pid){
-        // 任意：抽選ボタンを有効にしておく（管理者用）
-        console.warn('pidがありません。QRリンクを使用するか、URLに ?pid=P001 のように付けてください。');
-      }
-    })();
+        })
+        .catch(err => {
+          console.error(err);
+          resultDiv.textContent = "エラーが発生しました。";
+        });
+    });
   </script>
 </body>
 </html>
