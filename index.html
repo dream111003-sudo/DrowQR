@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Lets.抽選！</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    margin: 0;
+    font-family: 'Noto Sans JP', sans-serif;
+    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fbc2eb, #a18cd1);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+    color: #fff;
+    text-align: center;
+  }
+  @keyframes gradient {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+  }
+  h1 { margin-top: 50px; font-size: 2.5em; }
+  .info { margin-top: 20px; font-size: 1.2em; }
+  button {
+    margin-top: 50px; padding: 15px 30px;
+    font-size: 1.5em; border: none; border-radius: 10px;
+    background-color: #ff6f91; color: #fff;
+    cursor: pointer; transition: background 0.3s;
+  }
+  button:disabled { background-color: #aaa; cursor: not-allowed; }
+  .result { margin-top: 40px; font-size: 1.5em; }
+  #winnerList, #pdfBtn { display: none; margin-top: 20px; }
+</style>
+</head>
+<body>
+<h1>Lets.抽選！</h1>
+<div class="info">
+  当選者数：<span id="current">0</span> / <span id="limit">0</span>　
+  残り景品数：<span id="remaining">0</span>
+</div>
+<button id="drawBtn">ボタンを押して抽選！</button>
+<div class="result" id="result"></div>
+<button id="winnerList">当選者一覧を表示</button>
+<button id="pdfBtn">当選者一覧PDFをダウンロード</button>
+<audio id="bgm" src="bgm.mp3"></audio>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script>
+  const pid = new URLSearchParams(window.location.search).get("pid");
+  const gasUrl = "https://script.google.com/macros/s/AKfycbz60sf6e_yGgsZCr_cJbtWsqnWWbW66oIs7n0B96guCfoTwT0Sv5GZAODnNr9J3_3PT/exec";
+
+  const drawBtn = document.getElementById("drawBtn");
+  const winnerListBtn = document.getElementById("winnerList");
+  const pdfBtn = document.getElementById("pdfBtn");
+  const resultDiv = document.getElementById("result");
+  const bgm = document.getElementById("bgm");
+
+  function updateCount() {
+    fetch(`${gasUrl}?getcount=1`)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("current").textContent = d.winners;
+        document.getElementById("limit").textContent = d.limit;
+        document.getElementById("remaining").textContent = d.remaining;
+        if (d.winners >= d.limit) {
+          winnerListBtn.style.display = "inline-block";
+          pdfBtn.style.display = "inline-block";
+        }
+      });
+  }
+
+  drawBtn.addEventListener("click", () => {
+    drawBtn.disabled = true;
+    drawBtn.textContent = "抽選中…";
+    fetch(`${gasUrl}?pid=${pid}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.result === "win") {
+          resultDiv.innerHTML = `<strong>${d.name}</strong> さん、おめでとうございます！<br>景品：${d.prize}`;
+          bgm.play();
+          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        } else if (d.result === "limit_reached") {
+          resultDiv.textContent = "抽選は終了しました。";
+          winnerListBtn.style.display = "inline-block";
+          pdfBtn.style.display = "inline-block";
+        }
+        updateCount();
+      })
+      .finally(() => drawBtn.style.display = "none");
+  });
+
+  winnerListBtn.addEventListener("click", () => {
+    fetch(`${gasUrl}?getwinners=1`)
+      .then(r => r.json())
+      .then(list => {
+        let html = "<h2>当選者一覧</h2><ul>";
+        list.forEach(w => html += `<li>${w.name} - ${w.prize}</li>`);
+        html += "</ul>";
+        resultDiv.innerHTML = html;
+      });
+  });
+
+  pdfBtn.addEventListener("click", () => {
+    fetch(`${gasUrl}?getpdf=1`)
+      .then(r => r.json())
+      .then(d => {
+        window.open(d.url, "_blank");
+      });
+  });
+
+  updateCount();
+</script>
+</body>
+</html>
