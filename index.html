@@ -1,0 +1,71 @@
+<body>
+  <h1>Lets.抽選！</h1>
+  <div id="status"></div> <!-- 抽選人数表示 -->
+  <button id="drawButton">抽選スタート！</button>
+  <div id="result"></div>
+  <div id="winnersList"></div>
+
+  <audio id="bgm" src="bgm.mp3"></audio>
+  
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+  <script>
+    const gasUrl = "https://script.google.com/macros/s/AKfycbyU2SiryNjBn4LAdVSfqJVvKKkBAScUg9vNqQOgtBPleUTmICiRSPmQqBZe0y8pl9DK/exec"; // GASのWebアプリURLに置き換え
+    const pid = new URLSearchParams(window.location.search).get('pid');
+    const drawButton = document.getElementById("drawButton");
+    const resultDiv = document.getElementById("result");
+    const statusDiv = document.getElementById("status");
+    const winnersListDiv = document.getElementById("winnersList");
+    const bgm = document.getElementById("bgm");
+
+    // ページ読み込み時に人数表示を更新
+    function updateCount() {
+      fetch(`${gasUrl}?getcount=1`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.result === "count") {
+            statusDiv.textContent = `現在 ${data.current} 人 / 上限 ${data.limit} 人`;
+          }
+        });
+    }
+    updateCount();
+
+    drawButton.addEventListener("click", () => {
+      if (!pid) {
+        alert("参加者IDが見つかりません");
+        return;
+      }
+      fetch(`${gasUrl}?pid=${pid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.result === "limit_reached") {
+            resultDiv.innerHTML = "<p>抽選は終了しました！</p>";
+            drawButton.style.display = "none";
+          } else if (data.result === "win") {
+            updateCount(); // 抽選後も人数表示を更新
+            bgm.play();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            resultDiv.innerHTML = `<p>🎉 ${data.name} さんが <strong>${data.prize}</strong> に当選！</p>`;
+            drawButton.style.display = "none";
+            if (data.current === data.limit) {
+              const btn = document.createElement("button");
+              btn.textContent = "当選者一覧を見る";
+              btn.onclick = () => {
+                fetch(`${gasUrl}?getpdf=1`)
+                  .then(r => r.json())
+                  .then(pdfData => {
+                    if (pdfData.result === "pdf_ready") {
+                      window.open(pdfData.url, "_blank");
+                    }
+                  });
+              };
+              winnersListDiv.appendChild(btn);
+            }
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          resultDiv.textContent = "エラーが発生しました。";
+        });
+    });
+  </script>
+</body>
