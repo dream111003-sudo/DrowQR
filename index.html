@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🎁 ポップな抽選くじ 🎉</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2&display=swap" rel="stylesheet" />
+<style>
+  @keyframes gradient {
+    0% {background-position:0% 50%;}
+    50% {background-position:100% 50%;}
+    100% {background-position:0% 50%;}
+  }
+  body {
+    margin:0; padding:0;
+    font-family: 'Baloo 2', cursive;
+    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fad0c4, #ffecd2);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    color: #333;
+  }
+  main {
+    flex:1;
+    display:flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    text-align: center;
+  }
+  h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5em;
+    color: #d84315;
+    text-shadow: 1px 1px 2px #fff;
+  }
+  #result {
+    margin: 1.5em 0;
+    font-size: 1.5rem;
+    color: #2e7d32;
+    min-height: 4em;
+    animation: fadeIn 1s ease forwards;
+  }
+  @keyframes fadeIn {
+    from {opacity: 0;}
+    to {opacity: 1;}
+  }
+  button {
+    background: #f06292;
+    border: none;
+    color: white;
+    padding: 1em 2em;
+    font-size: 1.2rem;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(240,98,146,.6);
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background: #e91e63;
+  }
+  button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  #footer-info {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(255 255 255 / 0.9);
+    padding: 8px 12px;
+    border-radius: 16px;
+    font-weight: bold;
+    box-shadow: 0 0 8px rgba(0,0,0,0.15);
+    font-size: 0.9rem;
+  }
+  /* 紙吹雪用 */
+  .confetti-piece {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    opacity: 0.9;
+    z-index: 9999;
+    animation-name: confetti-fall;
+    animation-timing-function: linear;
+  }
+  @keyframes confetti-fall {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(360deg);
+      opacity: 0;
+    }
+  }
+  /* 当選者一覧モーダル */
+  #winners-modal {
+    display: none;
+    position: fixed;
+    top:0; left:0; right:0; bottom:0;
+    background: rgba(0,0,0,0.6);
+    z-index: 10000;
+    overflow-y: auto;
+  }
+  #winners-content {
+    background: #fff;
+    max-width: 600px;
+    margin: 5% auto;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  }
+  #winners-content h2 {
+    margin-top: 0;
+    color: #6a1b9a;
+  }
+  #winners-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #winners-table th, #winners-table td {
+    border: 2px solid #a1887f;
+    padding: 8px 12px;
+    font-size: 1rem;
+  }
+  #winners-table th {
+    background: #d1c4e9;
+    color: #4a148c;
+  }
+  #close-winners {
+    background: #ab47bc;
+    color: white;
+    border:none;
+    padding: 8px 20px;
+    font-size: 1rem;
+    border-radius: 30px;
+    margin-top: 16px;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(171,71,188,.7);
+  }
+  #close-winners:hover {
+    background: #8e24aa;
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <h1>🎁 抽選くじへようこそ！ 🎉</h1>
+  <div id="result">ボタンを押して結果を表示！</div>
+  <button id="draw-button">抽選する</button>
+  <button id="show-winners-button" style="display:none;">🎉 これまでの当選結果を見る</button>
+</main>
+
+<div id="footer-info">
+  残り景品数: <span id="remaining-prizes">--</span> / 現在の当選者数: <span id="current-winners">--</span>
+</div>
+
+<div id="winners-modal">
+  <div id="winners-content">
+    <h2>🎉 これまでの当選結果 🎁</h2>
+    <table id="winners-table" aria-label="当選者一覧">
+      <thead>
+        <tr><th>ID</th><th>氏名</th><th>景品名</th></tr>
+      </thead>
+      <tbody id="winners-tbody">
+        <tr><td colspan="3">読み込み中...</td></tr>
+      </tbody>
+    </table>
+    <button id="close-winners">閉じる</button>
+  </div>
+</div>
+
+<audio id="bgm" src="bgm.mp3" preload="auto"></audio>
+
+<script>
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbz60sf6e_yGgsZCr_cJbtWsqnWWbW66oIs7n0B96guCfoTwT0Sv5GZAODnNr9J3_3PT/exec';
+
+  const drawButton = document.getElementById('draw-button');
+  const resultDiv = document.getElementById('result');
+  const remainingSpan = document.getElementById('remaining-prizes');
+  const winnersSpan = document.getElementById('current-winners');
+  const showWinnersButton = document.getElementById('show-winners-button');
+  const winnersModal = document.getElementById('winners-modal');
+  const winnersTbody = document.getElementById('winners-tbody');
+  const closeWinnersBtn = document.getElementById('close-winners');
+  const bgm = document.getElementById('bgm');
+
+  // URLからpid取得
+  function getPid() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('pid');
+  }
+
+  function escapeHtml(text) {
+    return text.toString()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function playBGM() {
+    bgm.currentTime = 0;
+    bgm.play().catch(() => {
+      // 自動再生制限は無視
+    });
+  }
+
+  function launchConfetti() {
+    const colors = ['#ff4081','#e040fb','#7c4dff','#448aff','#40c4ff','#69f0ae','#ffea00','#ff6e40'];
+    const count = 120;
+    for(let i=0;i<count;i++){
+      const confetti = document.createElement('div');
+      confetti.classList.add('confetti-piece');
+      confetti.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
+      confetti.style.left = Math.random()*window.innerWidth + 'px';
+      confetti.style.top = Math.random()*-100 + 'px';
+      confetti.style.width = confetti.style.height = (6 + Math.random()*6) + 'px';
+      confetti.style.animationDuration = (3 + Math.random()*3) + 's';
+      confetti.style.animationDelay = (Math.random()*1) + 's';
+      confetti.style.transform = 'rotate('+Math.random()*360+'deg)';
+      document.body.appendChild(confetti);
+      setTimeout(() => confetti.remove(), 6000);
+    }
+  }
+
+  async function updateFooter(pid) {
+    try {
+      const res = await fetch(GAS_URL + '?pid=' + encodeURIComponent(pid));
+      const json = await res.json();
+      if (json.result === 'success' || json.result === 'already_won') {
+        remainingSpan.textContent = Math.max(0, json.maxWinners - json.currentWinnersCount);
+        winnersSpan.textContent = json.currentWinnersCount;
+        if (json.currentWinnersCount >= json.maxWinners) {
+          drawButton.style.display = 'none';
+          showWinnersButton.style.display = 'inline-block';
+          resultDiv.innerHTML = `<strong>抽選は終了しています。</strong>`;
+        }
+      } else if (json.result === 'limit_reached') {
+        remainingSpan.textContent = '0';
+        winnersSpan.textContent = json.maxWinners || '?';
+        drawButton.style.display = 'none';
+        showWinnersButton.style.display = 'inline-block';
+        resultDiv.innerHTML = `<strong>抽選は終了しています。</strong>`;
+      } else {
+        remainingSpan.textContent = '--';
+        winnersSpan.textContent = '--';
+      }
+    } catch (e) {
+      remainingSpan.textContent = '--';
+      winnersSpan.textContent = '--';
+    }
+  }
+
+  async function drawLottery() {
+    drawButton.disabled = true;
+    const pid = getPid();
+    if (!pid) {
+      resultDiv.innerHTML = '<span style="color:red;">pidパラメータが指定されていません。</span>';
+      drawButton.disabled = false;
+      return;
+    }
+    try {
+      const res = await fetch(GAS_URL + '?pid=' + encodeURIComponent(pid));
+      const json = await res.json();
+
+      if (json.result === 'limit_reached') {
+        resultDiv.innerHTML = `<strong>抽選上限に達しました。抽選は終了しています。</strong>`;
+        drawButton.style.display = 'none';
+        showWinnersButton.style.display = 'inline-block';
+        remainingSpan.textContent = '0';
+        winnersSpan.textContent = json.maxWinners;
+      } else if (json.result === 'success' || json.result === 'already_won') {
+        const name = json.participantName || '匿名';
+        const prize = json.prize || '景品なし';
+        resultDiv.innerHTML = `
+          <p>🎉 <strong>${escapeHtml(name)}</strong> さん<br>おめでとうございます！<br><strong>${escapeHtml(prize)}</strong> を獲得！</p>
+        `;
+        playBGM();
+        launchConfetti();
+        drawButton.style.display = 'none';
+        remainingSpan.textContent = Math.max(0, json.maxWinners - json.currentWinnersCount);
+        winnersSpan.textContent = json.currentWinnersCount;
+
+        if (json.currentWinnersCount >= json.maxWinners) {
+          showWinnersButton.style.display = 'inline-block';
+        }
+      } else {
+        resultDiv.innerHTML = `<span style="color:red;">エラー: ${escapeHtml(json.message || '不明なエラー')}</span>`;
+        drawButton.disabled = false;
+      }
+    } catch (e) {
+      resultDiv.innerHTML = '<span style="color:red;">通信エラーが発生しました。</span>';
+      drawButton.disabled = false;
+    }
+  }
+
+  async function fetchWinnersList() {
+    try {
+      const res = await fetch(GAS_URL + '?action=getWinnersList');
+      const json = await res.json();
+      if (!Array.isArray(json)) return [];
+      return json;
+    } catch {
+      return [];
+    }
+  }
+
+  function renderWinnersTable(winners) {
+    winnersTbody.innerHTML = '';
+    if (winners.length === 0) {
+      winnersTbody.innerHTML = '<tr><td colspan="3">当選者がまだいません。</td></tr>';
+      return;
+    }
+    winners.forEach(w => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(w.id)}</td><td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.prize)}</td>`;
+      winnersTbody.appendChild(tr);
+    });
+  }
+
+  drawButton.addEventListener('click', drawLottery);
+
+  showWinnersButton.addEventListener('click', async () => {
+    showWinnersButton.disabled = true;
+    winnersModal.style.display = 'block';
+    winnersTbody.innerHTML = '<tr><td colspan="3">読み込み中...</td></tr>';
+    const winners = await fetchWinnersList();
+    renderWinnersTable(winners);
+    showWinnersButton.disabled = false;
+  });
+
+  closeWinnersBtn.addEventListener('click', () => {
+    winnersModal.style.display = 'none';
+  });
+
+  // 初期状態で残り数・当選者数を更新
+  window.addEventListener('load', () => {
+    const pid = getPid();
+    if (!pid) {
+      resultDiv.innerHTML = '<span style="color:red;">URLにpidパラメータを付けてアクセスしてください。</span>';
+      drawButton.disabled = true;
+      return;
+    }
+    updateFooter(pid);
+  });
+</script>
+
+</body>
+</html>
